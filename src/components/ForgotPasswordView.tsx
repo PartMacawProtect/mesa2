@@ -7,7 +7,7 @@ interface ForgotPasswordViewProps {
   language: Language;
   onLanguageChange: (lang: Language) => void;
   onNavigate: (screen: Screen) => void;
-  onResetRequested: (email: string, debugCode?: string) => void;
+  onResetRequested: (email: string, debugCode?: string, smtpError?: string) => void;
 }
 
 export default function ForgotPasswordView({ language, onLanguageChange, onNavigate, onResetRequested }: ForgotPasswordViewProps) {
@@ -40,7 +40,7 @@ export default function ForgotPasswordView({ language, onLanguageChange, onNavig
       })
       .then((data) => {
         setIsLoading(false);
-        onResetRequested(email, data.debugCode || "");
+        onResetRequested(email, data.debugCode || "", data.smtpError);
       })
       .catch((err: any) => {
         setIsLoading(false);

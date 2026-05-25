@@ -7,7 +7,7 @@ interface RegisterViewProps {
   language: Language;
   onLanguageChange: (lang: Language) => void;
   onNavigate: (screen: Screen) => void;
-  onRegisterSuccess: (email: string, username: string, debugCode?: string) => void;
+  onRegisterSuccess: (email: string, username: string, debugCode?: string, smtpError?: string) => void;
 }
 
 export default function RegisterView({ language, onLanguageChange, onNavigate, onRegisterSuccess }: RegisterViewProps) {
@@ -43,7 +43,7 @@ export default function RegisterView({ language, onLanguageChange, onNavigate, o
       })
       .then((data) => {
         setIsLoading(false);
-        onRegisterSuccess(email, username, data.debugCode || "");
+        onRegisterSuccess(email, username, data.debugCode || "", data.smtpError);
       })
       .catch((err: any) => {
         setIsLoading(false);

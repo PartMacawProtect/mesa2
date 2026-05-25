@@ -95,7 +95,7 @@ interface PendingReset {
 const pendingResets = new Map<string, PendingReset>();
 
 // Helper to send OTP using real SMTP or print to dev terminal if credentials are missing
-async function sendOTPEmail(to: string, code: string, type: "register" | "reset"): Promise<{ success: boolean; isMock: boolean }> {
+async function sendOTPEmail(to: string, code: string, type: "register" | "reset"): Promise<{ success: boolean; isMock: boolean; error?: string }> {
   const host = process.env.SMTP_HOST;
   const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587;
   const user = process.env.SMTP_USER;
@@ -131,7 +131,13 @@ async function sendOTPEmail(to: string, code: string, type: "register" | "reset"
     </div>
   `;
 
-  if (host && user && pass) {
+  // Explicit check for what exactly is missing
+  const missing = [];
+  if (!host) missing.push("SMTP_HOST");
+  if (!user) missing.push("SMTP_USER");
+  if (!pass) missing.push("SMTP_PASS");
+
+  if (missing.length === 0) {
     try {
       const transporter = nodemailer.createTransport({
         host,
@@ -141,9 +147,13 @@ async function sendOTPEmail(to: string, code: string, type: "register" | "reset"
           user,
           pass,
         },
-        connectionTimeout: 4000, // 4 seconds timeout to connect
-        greetingTimeout: 4000,   // 4 seconds greeting timeout
-        socketTimeout: 5000,     // 5 seconds socket inactivity timeout
+        tls: {
+          // Prevent cert errors on outbound connection
+          rejectUnauthorized: false
+        },
+        connectionTimeout: 5000, 
+        greetingTimeout: 5000,   
+        socketTimeout: 6000,     
       });
 
       const sendMailPromise = transporter.sendMail({
@@ -154,29 +164,35 @@ async function sendOTPEmail(to: string, code: string, type: "register" | "reset"
         html: htmlContent,
       });
 
-      // Absolute safety race timeout of 5 seconds to guarantee we never block the event loop
+      // Absolute safety race timeout of 6 seconds to guarantee we never block the event loop
       const raceTimeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("SMTP send request timed out (5s limit reached)")), 5000)
+        setTimeout(() => reject(new Error("SMTP send request timed out (6s limit reached)")), 6000)
       );
 
       await Promise.race([sendMailPromise, raceTimeoutPromise]);
 
       console.log(`[SMTP] Successfully sent OTP code ${code} to ${to}`);
       return { success: true, isMock: false };
-    } catch (smtpError) {
+    } catch (smtpError: any) {
+      const errMsg = smtpError?.message || String(smtpError);
       console.error("[SMTP Error] Failed to send via SMTP; falling back to mock delivery:", smtpError);
+      return { success: true, isMock: true, error: errMsg };
     }
   }
 
+  const missingMsg = missing.length === 3 
+    ? "SMTP variables are not set in the environment" 
+    : `Missing required SMTP variables: ${missing.join(", ")}`;
+
   // Fallback log console format
   console.log("\n📬 ==================================================");
-  console.log(`📧 [MOCK EMAIL OTP SENT]`);
+  console.log(`📧 [MOCK EMAIL OTP SENT] (${missingMsg})`);
   console.log(`TO: ${to}`);
   console.log(`SUBJECT: ${subject}`);
   console.log(`CODE: ${code}`);
   console.log("================================================== 📬\n");
 
-  return { success: true, isMock: true };
+  return { success: true, isMock: true, error: missingMsg };
 }
 
 // --- REAL VERIFICATION SYSTEM APIS ---
@@ -206,6 +222,7 @@ app.post("/api/auth/register-request", async (req, res) => {
     success: true,
     isMock: emailResult.isMock,
     debugCode: emailResult.isMock ? code : undefined,
+    smtpError: emailResult.error,
   });
 });
 
@@ -290,6 +307,7 @@ app.post("/api/auth/reset-request", async (req, res) => {
     success: true,
     isMock: emailResult.isMock,
     debugCode: emailResult.isMock ? code : undefined,
+    smtpError: emailResult.error,
   });
 });
 
@@ -327,6 +345,7 @@ app.post("/api/auth/request-otp", async (req, res) => {
     success: true,
     isMock: emailResult.isMock,
     debugCode: emailResult.isMock ? code : undefined,
+    smtpError: emailResult.error,
   });
 });
 

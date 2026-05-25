@@ -17,6 +17,7 @@ export default function App() {
   const [isPasswordReset, setIsPasswordReset] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [debugCode, setDebugCode] = useState("");
+  const [smtpError, setSmtpError] = useState("");
 
   const handleNavigate = (targetScreen: Screen) => {
     setScreen(targetScreen);
@@ -34,9 +35,10 @@ export default function App() {
   };
 
   // 1. Reset email verification triggers
-  const handleResetRequested = (email: string, code?: string) => {
+  const handleResetRequested = (email: string, code?: string, errorMsg?: string) => {
     setOtpEmail(email);
     setDebugCode(code || "");
+    setSmtpError(errorMsg || "");
     setIsPasswordReset(true);
     setScreen(Screen.VERIFY_CODE);
   };
@@ -57,11 +59,12 @@ export default function App() {
   };
 
   // 4. Registration state saved and verify OTP triggers
-  const handleRegisterSuccess = (email: string, username: string, code?: string) => {
+  const handleRegisterSuccess = (email: string, username: string, code?: string, errorMsg?: string) => {
     setOtpEmail(email);
     setUserEmail(email);
     setUserName(username);
     setDebugCode(code || "");
+    setSmtpError(errorMsg || "");
     setIsPasswordReset(false);
     setScreen(Screen.VERIFY_EMAIL);
   };
@@ -148,6 +151,7 @@ export default function App() {
               onNavigate={handleNavigate}
               onVerifySuccess={handleVerifyResetSuccess}
               initialDebugCode={debugCode}
+              initialSmtpError={smtpError}
             />
           )}
 
@@ -160,6 +164,7 @@ export default function App() {
               onNavigate={handleNavigate}
               onVerifySuccess={handleVerifyEmailSuccess}
               initialDebugCode={debugCode}
+              initialSmtpError={smtpError}
             />
           )}
 
