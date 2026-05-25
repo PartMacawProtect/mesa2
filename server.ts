@@ -216,13 +216,14 @@ app.post("/api/auth/register-request", async (req, res) => {
     expiresAt: Date.now() + 10 * 60 * 1000,
   });
 
-  const emailResult = await sendOTPEmail(normalizedEmail, code, "register");
+  // Fire off email sending in the background to guarantee instantaneous response
+  sendOTPEmail(normalizedEmail, code, "register").catch((err) => {
+    console.error("[SMTP Background Error] Failed to send register email:", err);
+  });
   
   return res.json({
     success: true,
-    isMock: emailResult.isMock,
-    debugCode: emailResult.isMock ? code : undefined,
-    smtpError: emailResult.error,
+    isMock: false,
   });
 });
 
@@ -301,13 +302,14 @@ app.post("/api/auth/reset-request", async (req, res) => {
     verified: false,
   });
 
-  const emailResult = await sendOTPEmail(normalizedEmail, code, "reset");
+  // Fire off email sending in the background to guarantee instantaneous response
+  sendOTPEmail(normalizedEmail, code, "reset").catch((err) => {
+    console.error("[SMTP Background Error] Failed to send reset email:", err);
+  });
 
   return res.json({
     success: true,
-    isMock: emailResult.isMock,
-    debugCode: emailResult.isMock ? code : undefined,
-    smtpError: emailResult.error,
+    isMock: false,
   });
 });
 
@@ -339,13 +341,14 @@ app.post("/api/auth/request-otp", async (req, res) => {
     });
   }
 
-  const emailResult = await sendOTPEmail(normalizedEmail, code, type);
+  // Fire off email sending in the background to guarantee instantaneous response
+  sendOTPEmail(normalizedEmail, code, type).catch((err) => {
+    console.error("[SMTP Background Error] Failed to trigger resend email:", err);
+  });
 
   return res.json({
     success: true,
-    isMock: emailResult.isMock,
-    debugCode: emailResult.isMock ? code : undefined,
-    smtpError: emailResult.error,
+    isMock: false,
   });
 });
 

@@ -140,40 +140,6 @@ export default function VerifyView({
             </div>
           )}
 
-          {/* Debug Code Helper Banner for offline test environments */}
-          {debugCode && (
-            <div className="mb-6 w-full bg-surface-container-low border border-dashed border-primary/40 p-4 rounded-xl text-center z-10">
-              <span className="block text-[10px] font-extrabold text-primary tracking-wider uppercase mb-1">
-                {language === "EN" ? "Developer Verification Helper" : "Помощник отладки Mesa"}
-              </span>
-              {smtpError ? (
-                <div className="text-[11px] text-on-surface-variant font-medium leading-relaxed mb-3">
-                  <p className="mb-1 text-xs text-error font-semibold flex items-center justify-center gap-1">
-                    <span className="material-symbols-outlined text-[14px]">warning</span>
-                    {language === "EN" ? "SMTP Server connection failed:" : "Попытка отправить SMTP завершилась ошибкой:"}
-                  </p>
-                  <code className="block bg-error-container text-error p-2 rounded-lg font-mono break-all select-text font-semibold text-[10px] text-left border border-error/10 leading-normal mb-2 max-h-[100px] overflow-y-auto">
-                    {smtpError}
-                  </code>
-                  <p className="text-[10px] text-on-surface-variant">
-                    {language === "EN" 
-                      ? "Because email sending failed, use this temporary code to test your screen:" 
-                      : "Так как отправка письма не удалась, используйте этот временный код для входа:"}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-[11px] text-on-surface-variant font-medium leading-relaxed mb-2">
-                  {language === "EN" 
-                    ? "SMTP settings not configured in .env. Here is your generated verification code:" 
-                    : "Для локального тестирования (SMTP не задан) ваш сгенерированный код подтверждения:"}
-                </p>
-              )}
-              <div className="inline-block bg-primary text-on-primary font-mono text-lg font-bold px-4 py-1 rounded-md select-text tracking-widest">
-                {debugCode}
-              </div>
-            </div>
-          )}
-
           {/* Header texts */}
           <h1 className="text-2xl md:text-3xl font-bold text-on-surface mb-2">
             {isPasswordReset ? t.verifyCodeTitle : t.verifyEmailTitle}
