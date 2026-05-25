@@ -18,7 +18,8 @@ import {
   Pin,
   Trash2,
   Edit3,
-  Lock
+  Lock,
+  ArrowLeft
 } from "lucide-react";
 
 interface ToggleProps {
@@ -114,6 +115,17 @@ const formatTimeByLang = (dateStrOrDate: string | Date, lang: Language): string 
   }
 };
 
+const COMMON_EMOJIS = [
+  "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚",
+  "😋", "😛", "👅", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🥸", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️",
+  "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓",
+  "🤗", "🤔", "🫣", "🤭", "🤫", "🤥", "😶", "😶‍🌫️", "😐", "😑", "😬", "🫨", "🫠", "🫥", "✍️", "🖐️", "✋", "🖖", "👋", "🤙",
+  "💪", "🙏", "🤝", "👍", "👎", "👊", "✊", "🤛", "🤜", "🤞", "🤟", "👌", "🤌", "🤏", "👈", "👉", "👆", "👇",
+  "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❤️‍🔥", "❤️‍🩹", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝",
+  "🔥", "✨", "🌟", "⭐", "💫", "💥", "💨", "💦", "💧", "⚡", "🌈", "☀️", "🌤️", "⛅", "🌥️", "☁️", "🌦️", "🌧️", "⛈️", "❄️",
+  "🌸", "🌹", "🌺", "🌻", "🌼", "🌷", "🌱", "🌿", "🍀", "🍁", "🍂", "🍃", "🍄", "🐚", "🪨", "🌾", "☕", "🍎", "🍕", "🎉"
+];
+
 interface ChatViewProps {
   language: Language;
   onLanguageChange: (lang: Language) => void;
@@ -164,6 +176,11 @@ export default function ChatView({
   );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageAttachmentInputRef = useRef<HTMLInputElement>(null);
+
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
 
   // Context menus & interaction states
   const [activeChatOptionContactId, setActiveChatOptionContactId] = useState<string | null>(null);
@@ -266,6 +283,20 @@ export default function ChatView({
           setUserAvatar(reader.result);
           localStorage.setItem("mesa_user_avatar", reader.result);
           showChatToast(language === "EN" ? "Avatar successfully updated!" : "Аватар успешно обновлен!");
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleImageAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          setSelectedImage(reader.result);
+          setIsEmojiPickerOpen(false);
         }
       };
       reader.readAsDataURL(file);
@@ -398,7 +429,8 @@ export default function ChatView({
               text: m.text,
               time: m.time,
               isPinned: m.isPinned,
-              isEncrypted: m.isEncrypted
+              isEncrypted: m.isEncrypted,
+              imageUrl: m.imageUrl
             });
           });
 
@@ -629,10 +661,14 @@ export default function ChatView({
   // Submit new message to respective contact
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || !activeContactId || !userEmail) return;
+    if ((!inputText.trim() && !selectedImage) || !activeContactId || !userEmail) return;
 
     const messageText = inputText.trim();
+    const sentImage = selectedImage;
+
     setInputText("");
+    setSelectedImage(null);
+    setIsEmojiPickerOpen(false);
 
     const currentContactObj = contacts.find(c => c.id === activeContactId);
     const hasRecipientPublicKey = !!(currentContactObj && currentContactObj.publicKey);
@@ -643,7 +679,8 @@ export default function ChatView({
       sender: "user",
       text: messageText,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isEncrypted: hasRecipientPublicKey && !!userKeyPair
+      isEncrypted: hasRecipientPublicKey && !!userKeyPair,
+      imageUrl: sentImage || undefined
     };
 
     setMessagesMap(prev => {
@@ -664,7 +701,8 @@ export default function ChatView({
       let requestPayload: any = {
         sender: userEmail,
         recipient: activeContactId,
-        text: messageText
+        text: messageText,
+        imageUrl: sentImage || undefined
       };
 
       if (hasRecipientPublicKey && userKeyPair && currentContactObj?.publicKey) {
@@ -678,7 +716,8 @@ export default function ChatView({
             isEncrypted: true,
             encryptedKeyForRecipient: encrypted.encryptedKeyForRecipient,
             encryptedKeyForSender: encrypted.encryptedKeyForSender,
-            iv: encrypted.iv
+            iv: encrypted.iv,
+            imageUrl: sentImage || undefined
           };
         } catch (encErr) {
           console.error("Encryption failed, sending as cleartext fallback:", encErr);
@@ -778,79 +817,79 @@ export default function ChatView({
       )}
 
       {/* 2. SIDEBAR UTILITY NAVIGATION DRAWER */}
-      <aside className="w-24 bg-[#F8FAFC] dark:bg-[#0c111d] border-r border-[#E2E8F0] dark:border-slate-800/80 flex flex-col items-center py-8 justify-between shrink-0 h-full select-none">
+      <aside className={`w-full h-16 md:w-24 md:h-full bg-[#F8FAFC] dark:bg-[#0c111d] border-t md:border-t-0 md:border-r border-[#E2E8F0] dark:border-slate-800/80 flex flex-row md:flex-col items-center py-0 px-6 md:py-8 justify-between shrink-0 select-none fixed md:relative bottom-0 left-0 right-0 z-50 ${currentTab === "chats" && activeContactId ? "hidden md:flex" : "flex"}`}>
         
         {/* Mesa Logo Brand */}
-        <div className="flex flex-col items-center w-full">
+        <div className="hidden md:flex md:flex-col md:items-center md:w-full">
           <div className="text-[#1D1B84] dark:text-indigo-400 font-extrabold text-2xl tracking-wider mb-10 select-none">
             Mesa
           </div>
-
-          {/* Navigation Items (Chats, Contacts, Settings) */}
-          <nav className="flex flex-col gap-5 items-center w-full">
-            
-            {/* Chats Icon Box */}
-            <button 
-              type="button"
-              onClick={() => setCurrentTab("chats")}
-              className={`relative w-full py-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer group bg-transparent border-none transition-all ${
-                currentTab === "chats" 
-                  ? "text-[#1D1B84] dark:text-indigo-400 font-semibold" 
-                  : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-              }`}
-            >
-              {currentTab === "chats" && (
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#1D1B84] dark:bg-indigo-400 rounded-r-lg"></div>
-              )}
-              <MessageSquare className={`w-6 h-6 transition-transform group-hover:scale-105 duration-200`} />
-              <span className="text-[11px] tracking-wide mt-0.5">
-                {language === "EN" ? "Chats" : "Чаты"}
-              </span>
-            </button>
-
-            {/* Contacts Icon Box */}
-            <button 
-              type="button"
-              onClick={() => setCurrentTab("contacts")}
-              className={`relative w-full py-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer group bg-transparent border-none transition-all ${
-                currentTab === "contacts" 
-                  ? "text-[#1D1B84] dark:text-indigo-400 font-semibold" 
-                  : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-              }`}
-            >
-              {currentTab === "contacts" && (
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#1D1B84] dark:bg-indigo-400 rounded-r-lg"></div>
-              )}
-              <Users className={`w-6 h-6 transition-transform group-hover:scale-105 duration-200`} />
-              <span className="text-[11px] tracking-wide mt-0.5">
-                {language === "EN" ? "Contacts" : "Контакты"}
-              </span>
-            </button>
-
-            {/* Settings Icon Box */}
-            <button 
-              type="button"
-              onClick={() => setCurrentTab("settings")}
-              className={`relative w-full py-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer group bg-transparent border-none transition-all ${
-                currentTab === "settings" 
-                  ? "text-[#1D1B84] dark:text-indigo-400 font-semibold" 
-                  : "text-slate-400 dark:text-slate-500 hover:text-[#1D1B84] dark:hover:text-indigo-400"
-              }`}
-            >
-              {currentTab === "settings" && (
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#1D1B84] dark:bg-indigo-400 rounded-r-lg"></div>
-              )}
-              <SettingsIcon className={`w-6 h-6 transition-transform group-hover:scale-105 duration-200`} />
-              <span className="text-[11px] tracking-wide mt-0.5">
-                {language === "EN" ? "Settings" : "Настройки"}
-              </span>
-            </button>
-
-          </nav>
         </div>
 
+        {/* Navigation Items (Chats, Contacts, Settings) */}
+        <nav className="flex flex-row md:flex-col gap-1 md:gap-5 justify-around md:justify-start items-center w-full h-full md:h-auto">
+          
+          {/* Chats Icon Box */}
+          <button 
+            type="button"
+            onClick={() => setCurrentTab("chats")}
+            className={`relative flex-1 md:w-full py-2.5 md:py-4 flex flex-col items-center justify-center gap-1 cursor-pointer group bg-transparent border-none transition-all ${
+              currentTab === "chats" 
+                ? "text-[#1D1B84] dark:text-indigo-400 font-semibold" 
+                : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+            }`}
+          >
+            {currentTab === "chats" && (
+              <div className="absolute md:left-0 md:top-0 md:bottom-0 md:w-1 md:h-full top-0 left-4 right-4 h-1 bg-[#1D1B84] dark:bg-indigo-400 rounded-b-md md:rounded-r-lg md:rounded-b-none"></div>
+            )}
+            <MessageSquare className="w-5 h-5 md:w-6 md:h-6 transition-transform group-hover:scale-105 duration-200" />
+            <span className="text-[10px] md:text-[11px] tracking-wide mt-0.5">
+              {language === "EN" ? "Chats" : "Чаты"}
+            </span>
+          </button>
+
+          {/* Contacts Icon Box */}
+          <button 
+            type="button"
+            onClick={() => setCurrentTab("contacts")}
+            className={`relative flex-1 md:w-full py-2.5 md:py-4 flex flex-col items-center justify-center gap-1 cursor-pointer group bg-transparent border-none transition-all ${
+              currentTab === "contacts" 
+                ? "text-[#1D1B84] dark:text-indigo-400 font-semibold" 
+                : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+            }`}
+          >
+            {currentTab === "contacts" && (
+              <div className="absolute md:left-0 md:top-0 md:bottom-0 md:w-1 md:h-full top-0 left-4 right-4 h-1 bg-[#1D1B84] dark:bg-indigo-400 rounded-b-md md:rounded-r-lg md:rounded-b-none"></div>
+            )}
+            <Users className="w-5 h-5 md:w-6 md:h-6 transition-transform group-hover:scale-105 duration-200" />
+            <span className="text-[10px] md:text-[11px] tracking-wide mt-0.5">
+              {language === "EN" ? "Contacts" : "Контакты"}
+            </span>
+          </button>
+
+          {/* Settings Icon Box */}
+          <button 
+            type="button"
+            onClick={() => setCurrentTab("settings")}
+            className={`relative flex-1 md:w-full py-2.5 md:py-4 flex flex-col items-center justify-center gap-1 cursor-pointer group bg-transparent border-none transition-all ${
+              currentTab === "settings" 
+                ? "text-[#1D1B84] dark:text-indigo-400 font-semibold" 
+                : "text-slate-400 dark:text-slate-500 hover:text-[#1D1B84] dark:hover:text-indigo-400"
+            }`}
+          >
+            {currentTab === "settings" && (
+              <div className="absolute md:left-0 md:top-0 md:bottom-0 md:w-1 md:h-full top-0 left-4 right-4 h-1 bg-[#1D1B84] dark:bg-indigo-400 rounded-b-md md:rounded-r-lg md:rounded-b-none"></div>
+            )}
+            <SettingsIcon className="w-5 h-5 md:w-6 md:h-6 transition-transform group-hover:scale-105 duration-200" />
+            <span className="text-[10px] md:text-[11px] tracking-wide mt-0.5">
+              {language === "EN" ? "Settings" : "Настройки"}
+            </span>
+          </button>
+
+        </nav>
+
         {/* Quiet Version Label */}
-        <div className="text-[10px] text-slate-300 dark:text-slate-500 font-medium tracking-wider">
+        <div className="hidden md:block text-[10px] text-slate-300 dark:text-slate-500 font-medium tracking-wider">
           v1.0
         </div>
       </aside>
@@ -1078,15 +1117,33 @@ export default function ChatView({
                           </div>
                         )}
 
-                        <div className="flex flex-col max-w-[70%] sm:max-w-[60%] gap-1">
+                         <div className="flex flex-col max-w-[70%] sm:max-w-[60%] gap-1">
                           <div
-                            className={`px-5 py-3.5 text-sm md:text-base leading-relaxed relative ${
+                            className={`relative overflow-hidden ${
                               isUser
                                 ? "bg-primary text-on-primary rounded-[20px] rounded-br-[4px] shadow-sm selection:bg-white selection:text-primary"
                                 : "bg-surface-container-lowest text-on-surface rounded-[20px] rounded-bl-[4px] shadow-[0_2px_8px_rgba(45,50,130,0.02)] selection:bg-primary-fixed selection:text-on-primary-fixed border border-outline-variant/20"
-                            }`}
+                            } ${msg.imageUrl ? "p-1.5" : "px-5 py-3.5"}`}
                           >
-                            <p className="whitespace-pre-wrap">{msg.text}</p>
+                            {msg.imageUrl && (
+                              <div className="rounded-[16px] overflow-hidden max-w-full cursor-zoom-in group/img relative">
+                                <img 
+                                  src={msg.imageUrl} 
+                                  alt="Attachment" 
+                                  className="w-full h-auto max-h-[220px] object-cover rounded-[14px] transition-transform duration-300 hover:scale-[1.02] block"
+                                  referrerPolicy="no-referrer"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setFullscreenImage(msg.imageUrl || null);
+                                  }}
+                                />
+                              </div>
+                            )}
+                            {msg.text && (
+                              <p className={`whitespace-pre-wrap ${msg.imageUrl ? "px-3 pt-2 pb-1 text-sm md:text-base" : "text-sm md:text-base leading-relaxed"}`}>
+                                {msg.text}
+                              </p>
+                            )}
                           </div>
                           
                           <div className={`flex items-center gap-1.5 ${isUser ? "justify-end" : "justify-start"}`}>
@@ -1135,10 +1192,84 @@ export default function ChatView({
 
                 {/*composer footer */}
                 <footer className="p-4 bg-surface-container-lowest border-t border-outline-variant/20 shrink-0 select-none z-10">
+                  <input 
+                    ref={imageAttachmentInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageAttachmentChange}
+                    className="hidden"
+                    id="image-file-input"
+                  />
+
+                  {/* Selected image preview panel */}
+                  {selectedImage && (
+                    <div className="max-w-4xl mx-auto mb-3 p-3 bg-slate-50 dark:bg-slate-900 border border-outline-variant/20 rounded-2xl flex items-center justify-between gap-4 animate-scale-in">
+                      <div className="flex items-center gap-3">
+                        <img 
+                          src={selectedImage} 
+                          alt="Selected Attachment Preview" 
+                          className="w-14 h-14 object-cover rounded-xl border border-slate-200 dark:border-slate-800"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="text-left">
+                          <span className="block text-xs font-bold text-on-surface">
+                            {language === "EN" ? "Image Selected" : "Изображение выбрано"}
+                          </span>
+                          <span className="text-[10px] text-on-surface-variant/70 font-semibold font-mono">
+                            {language === "EN" ? "Ready to send" : "Готово к отправке"}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedImage(null)}
+                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-error-fixed rounded-full transition-all cursor-pointer border-none bg-transparent flex items-center justify-center"
+                        title={language === "EN" ? "Remove Image" : "Удалить изображение"}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Local Serene Emoji Picker Popover */}
+                  {isEmojiPickerOpen && (
+                    <div className="max-w-4xl mx-auto mb-3 p-4 bg-slate-50 dark:bg-slate-900 border border-outline-variant/20 rounded-2xl shadow-xl animate-fade-in relative z-10">
+                      <div className="flex justify-between items-center mb-2 pb-2 border-b border-outline-variant/10">
+                        <span className="text-xs font-extrabold text-[#1D1B84] dark:text-indigo-400 uppercase tracking-wider">
+                          {language === "EN" ? "Select Emoji" : "Выберите эмодзи"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsEmojiPickerOpen(false)}
+                          className="p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200 dark:hover:bg-slate-850 cursor-pointer border-none bg-transparent flex items-center justify-center"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-8 sm:grid-cols-12 md:grid-cols-16 gap-2.5 max-h-[130px] overflow-y-auto pr-1 select-none">
+                        {COMMON_EMOJIS.map((emoji, index) => (
+                          <button
+                            key={index}
+                            type="button"
+                            onClick={() => {
+                              setInputText(prev => prev + emoji);
+                            }}
+                            className="text-2xl p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-all border-none bg-transparent flex items-center justify-center active:scale-90"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto flex items-center gap-2">
                     <button 
                       type="button" 
+                      onClick={() => imageAttachmentInputRef.current?.click()}
                       className="p-3 bg-surface-container-low hover:bg-surface-container text-on-surface-variant rounded-full transition-colors flex items-center justify-center cursor-pointer border-none"
+                      title={language === "EN" ? "Attach Image" : "Прикрепить изображение"}
+                      id="attach-image-btn"
                     >
                       <Plus className="w-5 h-5 text-slate-500" />
                     </button>
@@ -1150,10 +1281,14 @@ export default function ChatView({
                         onChange={(e) => setInputText(e.target.value)}
                         placeholder={t.chatInputPlaceholder}
                         className="flex-grow bg-transparent text-sm md:text-base text-on-surface py-3.5 focus:outline-none placeholder:text-on-surface-variant/40 outline-none"
+                        id="chat-message-input"
                       />
                       <button 
                         type="button" 
-                        className="p-2 text-on-surface-variant/70 hover:text-on-surface transition-colors flex items-center justify-center cursor-pointer border-none bg-transparent"
+                        onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
+                        className={`p-2 rounded-full transition-colors flex items-center justify-center cursor-pointer border-none bg-transparent ${isEmojiPickerOpen ? "text-primary" : "text-on-surface-variant/70 hover:text-on-surface"}`}
+                        title={language === "EN" ? "Emojis" : "Эмодзи"}
+                        id="emoji-picker-btn"
                       >
                         <Smile className="w-5 h-5 text-slate-500" />
                       </button>
@@ -1161,8 +1296,10 @@ export default function ChatView({
 
                     <button
                       type="submit"
-                      disabled={!inputText.trim() || isTyping}
+                      disabled={(!inputText.trim() && !selectedImage) || isTyping}
                       className="p-3.5 bg-[#1D1B84] text-white hover:opacity-95 disabled:opacity-40 rounded-full transition-all flex items-center justify-center shadow-md active:scale-95 duration-100 cursor-pointer shrink-0 border-none"
+                      title={t.sendButtonLabel}
+                      id="send-message-btn"
                     >
                       <Send className="w-[18px] h-[18px] text-white" />
                     </button>
@@ -1793,6 +1930,34 @@ export default function ChatView({
                 {language === "EN" ? "Cancel" : "Отмена"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic Fullscreen Image Zoom Lightbox */}
+      {fullscreenImage && (
+        <div 
+          className="fixed inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center z-[999999] p-4 select-none cursor-zoom-out animate-fade-in"
+          onClick={() => setFullscreenImage(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setFullscreenImage(null)}
+            className="absolute top-6 right-6 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors border-none cursor-pointer flex items-center justify-center"
+            title={language === "EN" ? "Close" : "Закрыть"}
+          >
+            <X className="w-5 h-5 text-white" />
+          </button>
+          
+          <img 
+            src={fullscreenImage} 
+            alt="Fullscreen Zoomed View" 
+            className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl animate-scale-in"
+            referrerPolicy="no-referrer"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <div className="mt-4 px-4 py-1.5 rounded-full bg-white/5 text-white/70 text-[10px] font-sans font-semibold">
+            {language === "EN" ? "Click anywhere outside to exit Zoom" : "Нажмите в любом месте экрана для выхода из зума"}
           </div>
         </div>
       )}

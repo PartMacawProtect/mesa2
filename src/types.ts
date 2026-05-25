@@ -16,6 +16,7 @@ export interface Message {
   isSending?: boolean;
   isPinned?: boolean;
   isEncrypted?: boolean;
+  imageUrl?: string;
 }
 
 export interface Contact {

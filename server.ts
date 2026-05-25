@@ -68,6 +68,7 @@ interface ServerMessage {
   encryptedKeyForRecipient?: string;
   encryptedKeyForSender?: string;
   iv?: string;
+  imageUrl?: string;
 }
 const globalMessages: ServerMessage[] = [];
 
@@ -733,8 +734,8 @@ app.post("/api/messages/delete", (req, res) => {
 
 // Send message
 app.post("/api/messages/send", async (req, res) => {
-  const { sender, recipient, text, isEncrypted, encryptedKeyForRecipient, encryptedKeyForSender, iv } = req.body;
-  if (!sender || !recipient || !text) {
+  const { sender, recipient, text, isEncrypted, encryptedKeyForRecipient, encryptedKeyForSender, iv, imageUrl } = req.body;
+  if (!sender || !recipient || (!text && !imageUrl)) {
     return res.status(400).json({ success: false, error: "Недостаточно данных." });
   }
 
@@ -746,13 +747,14 @@ app.post("/api/messages/send", async (req, res) => {
     id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     sender: normalizedSender,
     recipient: normalizedRecipient,
-    text: text.trim(),
+    text: (text || "").trim(),
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     timestamp: Date.now(),
     isEncrypted: !!isEncrypted,
     encryptedKeyForRecipient: encryptedKeyForRecipient,
     encryptedKeyForSender: encryptedKeyForSender,
-    iv: iv
+    iv: iv,
+    imageUrl: imageUrl
   };
 
   globalMessages.push(userMsg);
