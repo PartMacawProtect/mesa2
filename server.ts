@@ -307,6 +307,12 @@ app.post("/api/auth/register-verify", (req, res) => {
     return res.status(400).json({ success: false, error: "Неверный код подтверждения. Попробуйте еще раз." });
   }
 
+  // Ensure that no user has registered with this email address in the meantime
+  if (users.has(normalizedEmail)) {
+    pendingRegistrations.delete(normalizedEmail);
+    return res.status(400).json({ success: false, error: "Пользователь с таким email уже существует." });
+  }
+
   // Confirm registration
   users.set(normalizedEmail, {
     username: pending.username,
@@ -382,6 +388,9 @@ app.post("/api/auth/request-otp", async (req, res) => {
   const code = Math.floor(100000 + Math.random() * 900000).toString();
 
   if (type === "register") {
+    if (users.has(normalizedEmail)) {
+      return res.status(400).json({ success: false, error: "Пользователь с таким email уже зарегистрирован." });
+    }
     const pending = pendingRegistrations.get(normalizedEmail);
     if (!pending) {
       return res.status(400).json({ success: false, error: "Сессия регистрации не найдена." });
