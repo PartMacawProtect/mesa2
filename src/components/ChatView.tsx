@@ -198,6 +198,8 @@ export default function ChatView({
   const [deleteMessageObj, setDeleteMessageObj] = useState<Message | null>(null);
   const [deleteMsgForEveryone, setDeleteMsgForEveryone] = useState(false);
 
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+
   // Synchronize dynamic message seen counts for unread badge metrics
   const [lastSeenCount, setLastSeenCount] = useState<Record<string, number>>(() => {
     try {
@@ -660,6 +662,27 @@ export default function ChatView({
     }
   };
 
+  const handleDeleteAccount = async () => {
+    try {
+      const response = await fetch("/api/users/delete-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: userEmail })
+      });
+      const data = await response.json();
+      if (data.success) {
+        // Log out user
+        onLogout();
+      } else {
+        alert(data.error || (language === "EN" ? "Failed to delete account." : "Не удалось удалить аккаунт."));
+      }
+    } catch (err) {
+      console.error("Failed to delete account:", err);
+    } finally {
+      setShowDeleteAccountModal(false);
+    }
+  };
+
   // Submit new message to respective contact
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -834,7 +857,9 @@ export default function ChatView({
           {/* Chats Icon Box */}
           <button 
             type="button"
-            onClick={() => setCurrentTab("chats")}
+            onClick={() => {
+              setCurrentTab("chats");
+            }}
             className={`relative flex-1 md:w-full py-2.5 md:py-4 flex flex-col items-center justify-center gap-1 cursor-pointer group bg-transparent border-none transition-all ${
               currentTab === "chats" 
                 ? "text-[#1D1B84] dark:text-indigo-400 font-semibold" 
@@ -1692,6 +1717,29 @@ export default function ChatView({
               </div>
             </div>
 
+            {/* Danger Zone Row */}
+            <div className="bg-rose-50/20 dark:bg-rose-950/10 rounded-3xl border border-rose-100 dark:border-rose-900/30 p-8 shadow-sm flex flex-col gap-4">
+              <h2 className="text-xl font-bold text-rose-600 dark:text-rose-400 tracking-tight flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                <span>{language === "EN" ? "Danger Zone" : "Опасная зона"}</span>
+              </h2>
+              <p className="text-xs text-slate-550 dark:text-slate-400 leading-relaxed font-medium">
+                {language === "EN" 
+                  ? "Permanently delete your Mesa account, including your public profile and all stored conversations. This action is irreversible." 
+                  : "Навсегда удалите вашу учетную запись Mesa, включая ваш публичный профиль и всю историю диалогов. Это действие необратимо."}
+              </p>
+              <div className="flex justify-start mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteAccountModal(true)}
+                  className="flex items-center gap-2 px-5 py-3 bg-rose-600 text-white hover:bg-rose-700 rounded-xl text-xs font-bold transition-all border-none cursor-pointer shadow-sm active:scale-95 duration-150"
+                >
+                  <Trash2 className="w-4 h-4 text-white" />
+                  <span>{language === "EN" ? "Delete Account" : "Удалить аккаунт"}</span>
+                </button>
+              </div>
+            </div>
+
             {/* Logout Trigger Link */}
             <div className="flex justify-start items-center mt-2 px-1">
               <button
@@ -1871,6 +1919,42 @@ export default function ChatView({
                 className="px-4 py-2.5 bg-[#1D1B84] text-white hover:opacity-90 rounded-xl text-xs font-bold transition-all border-none cursor-pointer shadow-md"
               >
                 {language === "EN" ? "Save" : "Сохранить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteAccountModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[99999] p-4 select-none">
+          <div 
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold text-slate-800 dark:text-white mb-2 font-sans flex items-center gap-2 text-rose-600 dark:text-rose-455">
+              <Trash2 className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+              <span>{language === "EN" ? "Delete Account" : "Удалить аккаунт"}</span>
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 font-sans leading-relaxed">
+              {language === "EN" 
+                ? "Are you absolutely sure you want to permanently delete your account? This action cannot be undone, and all your message archives will be destroyed." 
+                : "Вы абсолютно уверены, что хотите навсегда удалить свой аккаунт? Это действие нельзя отменить, а все ваши архивы сообщений будут уничтожены."}
+            </p>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowDeleteAccountModal(false)}
+                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all border-none cursor-pointer"
+              >
+                {language === "EN" ? "Cancel" : "Отмена"}
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                className="px-4 py-2.5 bg-rose-600 text-white hover:bg-rose-700 rounded-xl text-xs font-bold transition-all border-none cursor-pointer shadow-md"
+              >
+                {language === "EN" ? "Delete Permanently" : "Удалить навсегда"}
               </button>
             </div>
           </div>

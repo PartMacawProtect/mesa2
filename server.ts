@@ -573,6 +573,43 @@ app.post("/api/users/disconnect", (req, res) => {
   return res.json({ success: true });
 });
 
+// Delete user account permanently
+app.post("/api/users/delete-account", (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ success: false, error: "Email пользователя обязателен." });
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  if (!users.has(normalizedEmail)) {
+    return res.status(404).json({ success: false, error: "Пользователь не найден." });
+  }
+
+  // Remove user completely
+  users.delete(normalizedEmail);
+  userContactsMap.delete(normalizedEmail);
+  contactRenameMap.delete(normalizedEmail);
+
+  // Remove from other users' contact lists
+  userContactsMap.forEach((contacts, userKey) => {
+    if (contacts.has(normalizedEmail)) {
+      contacts.delete(normalizedEmail);
+    }
+  });
+
+  // Filter out all messages sent by this user or received by this user
+  for (let i = globalMessages.length - 1; i >= 0; i--) {
+    const msg = globalMessages[i];
+    if (msg.sender.toLowerCase() === normalizedEmail || msg.recipient.toLowerCase() === normalizedEmail) {
+      globalMessages.splice(i, 1);
+    }
+  }
+
+  saveDatabase();
+
+  return res.json({ success: true, message: "Аккаунт успешно удален." });
+});
+
 // Get user's contacts
 app.get("/api/users/contacts", (req, res) => {
   const email = (req.query.email as string || "").toLowerCase().trim();
