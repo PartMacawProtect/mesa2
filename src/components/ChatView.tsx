@@ -166,13 +166,13 @@ export default function ChatView({
 
   // Real User Bio state
   const [userBio, setUserBio] = useState(() => 
-    localStorage.getItem("mesa_user_bio") || 
+    localStorage.getItem(`mesa_user_bio_${userEmail.toLowerCase().trim()}`) || 
     (language === "EN" ? "In search of absolute calm." : "В поиске абсолютного спокойствия.")
   );
 
   // Real Avatar state
-  const [userAvatar, setUserAvatar] = useState(
-    localStorage.getItem("mesa_user_avatar") || ""
+  const [userAvatar, setUserAvatar] = useState(() =>
+    localStorage.getItem(`mesa_user_avatar_${userEmail.toLowerCase().trim()}`) || ""
   );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -283,7 +283,7 @@ export default function ChatView({
       reader.onload = () => {
         if (typeof reader.result === "string") {
           setUserAvatar(reader.result);
-          localStorage.setItem("mesa_user_avatar", reader.result);
+          localStorage.setItem(`mesa_user_avatar_${userEmail.toLowerCase().trim()}`, reader.result);
           showChatToast(language === "EN" ? "Avatar successfully updated!" : "Аватар успешно обновлен!");
         }
       };
@@ -678,6 +678,13 @@ export default function ChatView({
       });
       const data = await response.json();
       if (data.success) {
+        const keySuffix = userEmail.toLowerCase().trim();
+        localStorage.removeItem(`mesa_user_avatar_${keySuffix}`);
+        localStorage.removeItem(`mesa_user_bio_${keySuffix}`);
+        localStorage.removeItem(`mesa_e2e_keys_${keySuffix}`);
+        localStorage.removeItem("mesa_user_avatar");
+        localStorage.removeItem("mesa_user_bio");
+
         // Log out user
         onLogout();
       } else {
@@ -1620,7 +1627,7 @@ export default function ChatView({
                     onChange={(e) => {
                       const val = e.target.value;
                       setUserBio(val);
-                      localStorage.setItem("mesa_user_bio", val);
+                      localStorage.setItem(`mesa_user_bio_${userEmail.toLowerCase().trim()}`, val);
                     }}
                     placeholder={language === "EN" ? "Something quiet about yourself..." : "Что-нибудь спокойное о себе..."}
                     className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 text-sm text-slate-800 dark:text-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-[#1D1B84] dark:focus:border-indigo-400 transition-all outline-none resize-none font-sans"
