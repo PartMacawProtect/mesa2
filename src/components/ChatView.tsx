@@ -388,70 +388,72 @@ export default function ChatView({
           setContactBios(updatedBios);
         }
 
-        // 2. Fetch messages and map them
-        const messagesRes = await fetch(`/api/messages/sync?email=${encodeURIComponent(userEmail)}`);
-        if (!messagesRes.ok) return;
-        const messagesData = await messagesRes.json();
+        // 2. Fetch messages and map them (Defer message syncing until user's E2EE key pair is fully loaded)
+        if (userKeyPair) {
+          const messagesRes = await fetch(`/api/messages/sync?email=${encodeURIComponent(userEmail)}`);
+          if (!messagesRes.ok) return;
+          const messagesData = await messagesRes.json();
 
-        if (messagesData.success && isMounted) {
-          const serverMsgs = messagesData.messages;
-          const decryptedMsgs = await Promise.all(
-            serverMsgs.map(async (m: any) => {
-              if (m.isEncrypted && userKeyPair) {
-                try {
-                  const isMe = m.sender.toLowerCase() === userEmail.toLowerCase();
-                  const encKey = isMe ? m.encryptedKeyForSender : m.encryptedKeyForRecipient;
-                  if (encKey && m.iv) {
-                    const decryptedText = await decryptMessage(m.text, m.iv, encKey, userKeyPair.privateKey);
-                    return { ...m, text: decryptedText };
+          if (messagesData.success && isMounted) {
+            const serverMsgs = messagesData.messages;
+            const decryptedMsgs = await Promise.all(
+              serverMsgs.map(async (m: any) => {
+                if (m.isEncrypted && userKeyPair) {
+                  try {
+                    const isMe = m.sender.toLowerCase() === userEmail.toLowerCase();
+                    const encKey = isMe ? m.encryptedKeyForSender : m.encryptedKeyForRecipient;
+                    if (encKey && m.iv) {
+                      const decryptedText = await decryptMessage(m.text, m.iv, encKey, userKeyPair.privateKey);
+                      return { ...m, text: decryptedText };
+                    }
+                  } catch (e) {
+                    console.error("Failed to decrypt message ID:", m.id, e);
+                    return { ...m, text: language === "EN" ? "🔑 Encrypted (unreadable, key mismatch)" : "🔑 Зашифровано (невозможно прочитать, несовпадение ключей)" };
                   }
-                } catch (e) {
-                  console.error("Failed to decrypt message ID:", m.id, e);
-                  return { ...m, text: language === "EN" ? "🔑 Encrypted (unreadable, key mismatch)" : "🔑 Зашифровано (невозможно прочитать, несовпадение ключей)" };
                 }
+                return m;
+              })
+            );
+
+            const mapped: Record<string, Message[]> = {};
+
+            decryptedMsgs.forEach((m: any) => {
+              const isMe = m.sender.toLowerCase() === userEmail.toLowerCase();
+              const threadKey = isMe ? m.recipient.toLowerCase() : m.sender.toLowerCase();
+
+              if (!mapped[threadKey]) {
+                mapped[threadKey] = [];
               }
-              return m;
-            })
-          );
-
-          const mapped: Record<string, Message[]> = {};
-
-          decryptedMsgs.forEach((m: any) => {
-            const isMe = m.sender.toLowerCase() === userEmail.toLowerCase();
-            const threadKey = isMe ? m.recipient.toLowerCase() : m.sender.toLowerCase();
-
-            if (!mapped[threadKey]) {
-              mapped[threadKey] = [];
-            }
-            mapped[threadKey].push({
-              id: m.id,
-              sender: isMe ? "user" : threadKey,
-              text: m.text,
-              time: m.time,
-              isPinned: m.isPinned,
-              isEncrypted: m.isEncrypted,
-              imageUrl: m.imageUrl
+              mapped[threadKey].push({
+                id: m.id,
+                sender: isMe ? "user" : threadKey,
+                text: m.text,
+                time: m.time,
+                isPinned: m.isPinned,
+                isEncrypted: m.isEncrypted,
+                imageUrl: m.imageUrl
+              });
             });
-          });
 
-          // Seed/initialize lastSeenCount for newly synced threads so old messages aren't marked as unread
-          setLastSeenCount(prev => {
-            let changed = false;
-            const updated = { ...prev };
-            Object.keys(mapped).forEach(contactId => {
-              if (updated[contactId] === undefined) {
-                updated[contactId] = mapped[contactId].length;
-                changed = true;
+            // Seed/initialize lastSeenCount for newly synced threads so old messages aren't marked as unread
+            setLastSeenCount(prev => {
+              let changed = false;
+              const updated = { ...prev };
+              Object.keys(mapped).forEach(contactId => {
+                if (updated[contactId] === undefined) {
+                  updated[contactId] = mapped[contactId].length;
+                  changed = true;
+                }
+              });
+              if (changed) {
+                localStorage.setItem("mesa_last_seen_count", JSON.stringify(updated));
+                return updated;
               }
+              return prev;
             });
-            if (changed) {
-              localStorage.setItem("mesa_last_seen_count", JSON.stringify(updated));
-              return updated;
-            }
-            return prev;
-          });
 
-          setMessagesMap(mapped);
+            setMessagesMap(mapped);
+          }
         }
       } catch (err) {
         console.error("Networking err during sync:", err);
@@ -817,7 +819,7 @@ export default function ChatView({
       )}
 
       {/* 2. SIDEBAR UTILITY NAVIGATION DRAWER */}
-      <aside className={`w-full h-16 md:w-24 md:h-full bg-[#F8FAFC] dark:bg-[#0c111d] border-t md:border-t-0 md:border-r border-[#E2E8F0] dark:border-slate-800/80 flex flex-row md:flex-col items-center py-0 px-6 md:py-8 justify-between shrink-0 select-none fixed md:relative bottom-0 left-0 right-0 z-50 ${currentTab === "chats" && activeContactId ? "hidden md:flex" : "flex"}`}>
+      <aside className={`w-full h-16 md:w-28 md:h-full bg-[#F8FAFC] dark:bg-[#0c111d] border-t md:border-t-0 md:border-r border-[#E2E8F0] dark:border-slate-800/80 flex flex-row md:flex-col items-center py-0 px-6 md:px-0 md:py-8 justify-between shrink-0 select-none fixed md:relative bottom-0 left-0 right-0 z-50 ${(currentTab === "chats" && activeContactId) || (currentTab === "contacts" && selectedContactDetailedId) ? "hidden md:flex" : "flex"}`}>
         
         {/* Mesa Logo Brand */}
         <div className="hidden md:flex md:flex-col md:items-center md:w-full">
@@ -900,8 +902,13 @@ export default function ChatView({
       {currentTab === "chats" && (
         <>
           {/* Chats left panel */}
-          <section className="w-[300px] border-r border-[#E2E8F0] dark:border-slate-800/80 bg-surface-container-lowest flex flex-col h-full shrink-0 animate-fade-in select-none">
+          <section className={`w-full md:w-[320px] lg:w-[350px] border-r border-[#E2E8F0] dark:border-slate-800/80 bg-surface-container-lowest flex flex-col h-full shrink-0 animate-fade-in select-none ${activeContactId ? "hidden md:flex" : "flex"}`}>
             <div className="p-6 pb-4 flex flex-col gap-4">
+              {/* Mobile Branding Bar */}
+              <div className="md:hidden flex items-center gap-1.5 mb-1 bg-surface-container-low px-3 py-2 rounded-2xl w-fit">
+                <span className="text-base font-black tracking-wider text-[#1D1B84] dark:text-indigo-400">Mesa</span>
+                <span className="text-[9px] bg-[#1D1B84]/15 dark:bg-indigo-400/20 text-[#1D1B84] dark:text-indigo-400 px-2 py-0.5 rounded-full font-black uppercase tracking-wider">v1.0</span>
+              </div>
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-bold tracking-tight text-on-surface font-sans">
                   {t.activeChats}
@@ -918,7 +925,7 @@ export default function ChatView({
             </div>
 
             {/* List of active chat rooms */}
-            <div className="flex-grow overflow-y-auto px-1">
+            <div className="flex-grow overflow-y-auto px-1 pb-24 md:pb-4">
               <div className="flex flex-col">
                 {contacts.map((c) => {
                   const isActive = activeContactId === c.id;
@@ -982,7 +989,7 @@ export default function ChatView({
           </section>
 
           {/* Conversation view on the right */}
-          <section className="flex-1 flex flex-col h-full bg-background relative animate-fade-in">
+          <section className={`flex-1 flex flex-col h-full bg-background relative animate-fade-in ${activeContactId ? "flex" : "hidden md:flex"}`}>
             {!currentChatContact ? (
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50 dark:bg-[#090d16]/30">
                 <div className="w-20 h-20 rounded-full bg-primary/5 dark:bg-indigo-400/5 flex items-center justify-center text-[#1D1B84] dark:text-indigo-400 mb-6 border border-slate-100 dark:border-slate-800">
@@ -1007,13 +1014,21 @@ export default function ChatView({
               </div>
             ) : (
               <>
-                <header className="h-[72px] border-b border-outline-variant/20 bg-surface-container-lowest px-6 flex justify-between items-center shrink-0 z-10 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
+                <header className="h-[72px] border-b border-outline-variant/20 bg-surface-container-lowest px-4 sm:px-6 flex justify-between items-center shrink-0 z-10 shadow-sm gap-2">
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setActiveContactId(null)}
+                      className="md:hidden p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 shrink-0 cursor-pointer border-none bg-transparent flex items-center justify-center"
+                      title={language === "EN" ? "Back to Chats" : "Назад к чатам"}
+                    >
+                      <ArrowLeft className="w-5 h-5 text-slate-500" />
+                    </button>
+                    <div className="relative shrink-0">
                       {renderAvatar(currentChatContact.name, currentChatContact.avatar, "w-10 h-10 text-xs")}
                     </div>
-                    <div>
-                      <h1 className="font-bold text-sm text-on-surface font-sans">
+                    <div className="min-w-0">
+                      <h1 className="font-bold text-sm text-on-surface font-sans truncate" title={currentChatContact.name}>
                         {currentChatContact.name}
                       </h1>
                       <div className="flex items-center gap-1.5 mt-0.5">
@@ -1140,7 +1155,7 @@ export default function ChatView({
                               </div>
                             )}
                             {msg.text && (
-                              <p className={`whitespace-pre-wrap ${msg.imageUrl ? "px-3 pt-2 pb-1 text-sm md:text-base" : "text-sm md:text-base leading-relaxed"}`}>
+                              <p className={`whitespace-pre-wrap break-words ${msg.imageUrl ? "px-3 pt-2 pb-1 text-sm md:text-base" : "text-sm md:text-base leading-relaxed"}`}>
                                 {msg.text}
                               </p>
                             )}
@@ -1315,8 +1330,13 @@ export default function ChatView({
       {currentTab === "contacts" && (
         <>
           {/* Contacts Left Panel */}
-          <section className="w-[300px] border-r border-outline-variant/30 bg-surface-container-lowest flex flex-col h-full shrink-0 animate-fade-in select-none">
+          <section className={`w-full md:w-[320px] lg:w-[350px] border-r border-outline-variant/30 bg-surface-container-lowest flex flex-col h-full shrink-0 animate-fade-in select-none ${selectedContactDetailedId ? "hidden md:flex" : "flex"}`}>
             <div className="p-6 pb-4 flex flex-col gap-4">
+              {/* Mobile Branding Bar */}
+              <div className="md:hidden flex items-center gap-1.5 mb-1 bg-surface-container-low px-3 py-2 rounded-2xl w-fit">
+                <span className="text-base font-black tracking-wider text-[#1D1B84] dark:text-indigo-400">Mesa</span>
+                <span className="text-[9px] bg-[#1D1B84]/15 dark:bg-indigo-400/20 text-[#1D1B84] dark:text-indigo-400 px-2 py-0.5 rounded-full font-black uppercase tracking-wider">v1.0</span>
+              </div>
               <h2 className="text-xl font-bold tracking-tight text-on-surface font-sans">
                 {language === "EN" ? "Contacts" : "Контакты"}
               </h2>
@@ -1335,7 +1355,7 @@ export default function ChatView({
             </div>
 
             {/* List scroll */}
-            <div className="flex-grow overflow-y-auto px-1">
+            <div className="flex-grow overflow-y-auto px-1 pb-24 md:pb-4">
               <div className="flex flex-col gap-1">
                 {filteredContacts.map((c) => {
                   const isActive = selectedContactDetailedId === c.id;
@@ -1392,8 +1412,16 @@ export default function ChatView({
           </section>
 
           {/* Contact detailed profile pane */}
-          <section className="flex-1 flex flex-col h-full bg-background relative animate-fade-in select-none">
-            <header className="h-[72px] border-b border-outline-variant/20 bg-surface-container-lowest px-6 flex justify-between items-center shrink-0 z-10 shadow-sm">
+          <section className={`flex-1 flex flex-col h-full bg-background relative animate-fade-in select-none ${selectedContactDetailedId ? "flex" : "hidden md:flex"}`}>
+            <header className="h-[72px] border-b border-outline-variant/20 bg-surface-container-lowest px-4 sm:px-6 flex items-center gap-2 sm:gap-3 shrink-0 z-10 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setSelectedContactDetailedId(null)}
+                className="md:hidden p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 shrink-0 cursor-pointer border-none bg-transparent flex items-center justify-center"
+                title={language === "EN" ? "Back to Contacts" : "Назад к контактам"}
+              >
+                <ArrowLeft className="w-5 h-5 text-slate-500" />
+              </button>
               <h1 className="font-bold text-sm text-on-surface font-sans">
                 {language === "EN" ? "Detailed Contact Bio" : "Карточка контакта"}
               </h1>
@@ -1478,13 +1506,18 @@ export default function ChatView({
         </>
       )}
       {currentTab === "settings" && (
-        <section className="flex-grow flex flex-col h-full bg-[#f8fafc] dark:bg-[#090d16] overflow-y-auto animate-fade-in relative">
+        <section className="flex-grow flex flex-col h-full bg-[#f8fafc] dark:bg-[#090d16] overflow-y-auto animate-fade-in relative pb-24 md:pb-6">
           
           {/* Centered Configuration Container */}
           <div className="max-w-2xl w-full mx-auto py-10 px-6 md:px-8 flex flex-col gap-8 select-none">
             
             {/* Main Header */}
             <div>
+              {/* Mobile Branding Bar */}
+              <div className="md:hidden flex items-center gap-1.5 mb-2 bg-slate-200/50 dark:bg-slate-800/50 border border-outline-variant/10 px-3 py-2 rounded-2xl w-fit">
+                <span className="text-base font-black tracking-wider text-[#1D1B84] dark:text-indigo-400">Mesa</span>
+                <span className="text-[9px] bg-[#1D1B84]/15 dark:bg-indigo-400/20 text-[#1D1B84] dark:text-indigo-400 px-2 py-0.5 rounded-full font-black uppercase tracking-wider">v1.0</span>
+              </div>
               <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                 {language === "EN" ? "Profile Settings" : "Настройки профиля"}
               </h1>

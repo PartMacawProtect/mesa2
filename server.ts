@@ -4,6 +4,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
+import fs from "fs";
 
 dotenv.config();
 
@@ -77,6 +78,62 @@ const userContactsMap = new Map<string, Set<string>>();
 
 // Map of userEmail (lowercase) -> Map of contactEmail (lowercase) -> customName
 const contactRenameMap = new Map<string, Map<string, string>>();
+
+// --- FILE STORAGE PERSISTENCE MECHANISM ---
+const DB_FILE = path.join(process.cwd(), "mesa_db.json");
+
+function saveDatabase() {
+  try {
+    const data = {
+      users: Array.from(users.entries()),
+      globalMessages,
+      userContactsMap: Array.from(userContactsMap.entries()).map(([k, v]) => [k, Array.from(v)]),
+      contactRenameMap: Array.from(contactRenameMap.entries()).map(([k, v]) => [k, Array.from(v.entries())])
+    };
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error saving database to file:", err);
+  }
+}
+
+function loadDatabase() {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const fileContent = fs.readFileSync(DB_FILE, "utf-8");
+      if (!fileContent.trim()) return;
+      const data = JSON.parse(fileContent);
+      
+      if (data.users && Array.isArray(data.users)) {
+        data.users.forEach(([k, v]: any) => {
+          users.set(k, v);
+        });
+      }
+      
+      if (data.globalMessages && Array.isArray(data.globalMessages)) {
+        globalMessages.length = 0;
+        globalMessages.push(...data.globalMessages);
+      }
+      
+      if (data.userContactsMap && Array.isArray(data.userContactsMap)) {
+        data.userContactsMap.forEach(([k, v]: any) => {
+          userContactsMap.set(k, new Set(v));
+        });
+      }
+      
+      if (data.contactRenameMap && Array.isArray(data.contactRenameMap)) {
+        data.contactRenameMap.forEach(([k, v]: any) => {
+          contactRenameMap.set(k, new Map(v));
+        });
+      }
+      console.log("Mesa database successfully restored from file:", DB_FILE);
+    }
+  } catch (err) {
+    console.error("Failed to load persistent Mesa database:", err);
+  }
+}
+
+// Initial restoration of database
+loadDatabase();
 
 // --- IN-MEMORY PENDING REGISTER OTP LOGS ---
 interface PendingRegistration {
@@ -255,6 +312,7 @@ app.post("/api/auth/register-verify", (req, res) => {
     username: pending.username,
     passwordHash: pending.passwordHash,
   });
+  saveDatabase();
 
   pendingRegistrations.delete(normalizedEmail);
 
@@ -401,6 +459,7 @@ app.post("/api/auth/reset-complete", (req, res) => {
 
   user.passwordHash = password;
   users.set(normalizedEmail, user);
+  saveDatabase();
 
   pendingResets.delete(normalizedEmail);
 
@@ -474,6 +533,7 @@ app.post("/api/users/pulse", (req, res) => {
   if (publicKey) user.publicKey = publicKey;
 
   users.set(normalizedEmail, user);
+  saveDatabase();
 
   return res.json({
     success: true,
@@ -499,6 +559,7 @@ app.post("/api/users/disconnect", (req, res) => {
   if (user) {
     user.lastActive = 0; // set inactive
     users.set(normalizedEmail, user);
+    saveDatabase();
   }
   return res.json({ success: true });
 });
@@ -581,6 +642,7 @@ app.post("/api/users/contacts/add", (req, res) => {
     userContactsMap.set(normalizedContact, new Set());
   }
   userContactsMap.get(normalizedContact)!.add(normalizedUser);
+  saveDatabase();
 
   let isOnline = false;
   if (normalizedContact === "elena@mesa.com") {
@@ -649,6 +711,7 @@ app.post("/api/users/contacts/rename", (req, res) => {
     contactRenameMap.set(uEmail, new Map());
   }
   contactRenameMap.get(uEmail)!.set(cEmail, newName.trim());
+  saveDatabase();
 
   return res.json({ success: true, newName: newName.trim() });
 });
@@ -690,6 +753,7 @@ app.post("/api/chats/delete", (req, res) => {
   if (userContactsMap.has(uEmail)) {
     userContactsMap.get(uEmail)!.delete(cEmail);
   }
+  saveDatabase();
 
   return res.json({ success: true });
 });
@@ -703,6 +767,7 @@ app.post("/api/messages/pin", (req, res) => {
   const msg = globalMessages.find(m => m.id === messageId);
   if (msg) {
     msg.isPinned = !!isPinned;
+    saveDatabase();
     return res.json({ success: true, message: msg });
   }
   return res.status(404).json({ success: false, error: "Сообщение не найдено." });
@@ -727,6 +792,7 @@ app.post("/api/messages/delete", (req, res) => {
         msg.deletedBy.push(uEmail);
       }
     }
+    saveDatabase();
     return res.json({ success: true });
   }
   return res.status(404).json({ success: false, error: "Сообщение не найдено." });
@@ -815,8 +881,11 @@ app.post("/api/messages/send", async (req, res) => {
         timestamp: Date.now()
       };
       globalMessages.push(aiMsg);
+      saveDatabase();
     }, 1000);
   }
+
+  saveDatabase();
 
   return res.json({
     success: true,
