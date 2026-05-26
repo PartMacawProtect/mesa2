@@ -338,6 +338,9 @@ export default function ChatView({
   // In-messenger messages map per contact id
   const [messagesMap, setMessagesMap] = useState<Record<string, Message[]>>({});
 
+  // Flag to auto-select contact only once on desktop view
+  const hasAutoSelectedRef = useRef(false);
+
   // Real-time synchronization of contacts and messages from backend
   useEffect(() => {
     if (!userEmail) return;
@@ -369,10 +372,14 @@ export default function ChatView({
           const fetchedContacts: Contact[] = contactsData.contacts;
           setContacts(fetchedContacts);
 
-          // Auto-select first contact if activeContactId is null but we have contacts
-          if (fetchedContacts.length > 0) {
-            setActiveContactId(prev => prev || fetchedContacts[0].id);
-            setSelectedContactDetailedId(prev => prev || fetchedContacts[0].id);
+          // Auto-select first contact if activeContactId is null but we have contacts (only on desktop and only initially)
+          if (fetchedContacts.length > 0 && !hasAutoSelectedRef.current) {
+            const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
+            if (isDesktop) {
+              setActiveContactId(fetchedContacts[0].id);
+              setSelectedContactDetailedId(fetchedContacts[0].id);
+            }
+            hasAutoSelectedRef.current = true;
           }
 
           // Build/update bios for contact detailed cards gracefully using dynamic server bio
@@ -1534,7 +1541,7 @@ export default function ChatView({
         <section className="flex-grow flex flex-col h-full bg-[#f8fafc] dark:bg-[#090d16] overflow-y-auto animate-fade-in relative pb-24 md:pb-6">
           
           {/* Centered Configuration Container */}
-          <div className="max-w-2xl w-full mx-auto py-10 px-6 md:px-8 flex flex-col gap-8 select-none">
+          <div className="max-w-2xl w-full mx-auto py-10 px-6 md:px-8 flex flex-col gap-8">
             
             {/* Main Header */}
             <div>
@@ -1760,7 +1767,7 @@ export default function ChatView({
       {isAddContactOpen && (
         <div 
           onClick={() => setIsAddContactOpen(false)}
-          className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center p-4 z-50 select-none"
+          className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center p-4 z-50"
         >
           <div 
             onClick={(e) => e.stopPropagation()}
